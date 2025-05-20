@@ -19,7 +19,8 @@ RegisterNUICallback('TestDrive', function(data, cb)
 
     exports.mythic_notify:PersistentAlert('START', 'veh_load_waiting', 'inform', 'Please wait, the model is being loaded.')
 
-    CoreObj.Game.SpawnVehicle(model, vector3(-1733.25, -2901.43, 13.94), 326, function(vehicle)
+    CoreObj.Functions.LoadModel(model)
+    CoreObj.Functions.SpawnVehicle(model, vector3(-1733.25, -2901.43, 13.94), 326, function(vehicle)
         IsInShopMenu = false -- we do this here to prevent people from opening the menu while the car is spawning
         
         exports.mythic_notify:PersistentAlert('END', 'veh_load_waiting')
@@ -54,16 +55,17 @@ RegisterNUICallback('BuyVehicle', function(data, cb)
     local playerPed = PlayerPedId()
     IsInShopMenu = false
 
-    CoreObj.TriggerServerCallback('bv-cars:buyVehicle', function(hasEnoughMoney)
+    CoreObj.TriggerCallback('bv-cars:buyVehicle', function(hasEnoughMoney)
         if hasEnoughMoney then
             exports.mythic_notify:PersistentAlert('START', 'veh_load_waiting', 'inform', 'Please wait, the model is being loaded.')
-            CoreObj.Game.SpawnVehicle(model, vector3(-28.6, -1085.6, 25.5), 330.0, function(vehicle)
+            CoreObj.Functions.LoadModel(model)
+            CoreObj.Functions.SpawnVehicle(model, vector3(-28.6, -1085.6, 25.5), 330.0, function(vehicle)
                 exports.mythic_notify:PersistentAlert('END', 'veh_load_waiting')
 
                 TaskWarpPedIntoVehicle(playerPed, vehicle, -1)
 
                 local newPlate = GeneratePlate()
-                local vehicleProps = CoreObj.Game.GetVehicleProperties(vehicle)
+                local vehicleProps = CoreObj.Functions.GetVehicleProperties(vehicle)
                 vehicleProps.plate = newPlate
                 SetVehicleNumberPlateText(vehicle, newPlate)
 
@@ -104,37 +106,33 @@ Citizen.CreateThread(function()
     end
 end)
 
-RegisterNetEvent('fu_cars:client:addVehicle')
-AddEventHandler('fu_cars:client:addVehicle', function(playerId)
+RegisterNetEvent('bv-cars:client:addVehicle')
+AddEventHandler('bv-cars:client:addVehicle', function(playerId, newPlate)
     local playerPed = PlayerPedId()
 
     if IsPedInAnyVehicle(playerPed, false) then
         local vehicle = GetVehiclePedIsIn(playerPed, false)
 
-        local newPlate = GeneratePlate()
-        local vehicleProps = CoreObj.Game.GetVehicleProperties(vehicle)
+        local vehicleProps = CoreObj.Functions.GetVehicleProperties(vehicle)
         vehicleProps.plate = newPlate
         SetVehicleNumberPlateText(vehicle, newPlate)
 
-        TriggerServerEvent('fu_vehiclemanager:server:setTireWear', newPlate, 0)
-        TriggerServerEvent('fu_cars:server:addVehicle', vehicleProps, playerId)
+        TriggerServerEvent('bv-cars:server:addVehicle', vehicleProps, playerId)
     end
 end)
 
-RegisterNetEvent('fu_cars:client:addEmVehicle')
-AddEventHandler('fu_cars:client:addEmVehicle', function(service, type, mingrade)
+RegisterNetEvent('bv-cars:client:addEmVehicle')
+AddEventHandler('bv-cars:client:addEmVehicle', function(service, type, mingrade, newPlate)
     local playerPed = PlayerPedId()
 
     if IsPedInAnyVehicle(playerPed, false) then
         local vehicle = GetVehiclePedIsIn(playerPed, false)
 
-        local newPlate = GeneratePlate()
-        local vehicleProps = CoreObj.Game.GetVehicleProperties(vehicle)
+        local vehicleProps = CoreObj.Functions.GetVehicleProperties(vehicle)
         vehicleProps.plate = newPlate
         SetVehicleNumberPlateText(vehicle, newPlate)
 
-        TriggerServerEvent('fu_vehiclemanager:server:setTireWear', newPlate, 0)
-        TriggerServerEvent('fu_cars:server:addEmVehicle', vehicleProps, service, type, mingrade)
+        TriggerServerEvent('bv-cars:server:addEmVehicle', vehicleProps, service, type, mingrade)
     end
 end)
 
@@ -182,9 +180,9 @@ Citizen.CreateThread(function()
                             local plate = CoreObj.Math.Trim(GetVehicleNumberPlateText(vehicle))
                             local model = GetEntityModel(vehicle)
 
-                            CoreObj.TriggerServerCallback('bv-cars:resellVehicle', function(vehicleSold)
+                            CoreObj.TriggerCallback('bv-cars:resellVehicle', function(vehicleSold)
                                 if vehicleSold then
-                                    CoreObj.Game.DeleteVehicle(vehicle)
+                                    CoreObj.Functions.DeleteVehicle(vehicle)
                                 else
                                     exports.mythic_notify:SendAlert('error', 'You can only sell your own vehicles.')
                                 end

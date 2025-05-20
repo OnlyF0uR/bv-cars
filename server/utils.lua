@@ -18,11 +18,9 @@ function GeneratePlate()
             generatedPlate = string.upper(GetRandomLetter(Config.PlateLetters) .. GetRandomNumber(Config.PlateNumbers))
         end
 
-        CoreObj.TriggerServerCallback('bv-cars:isPlateTaken', function(isPlateTaken)
-            if not isPlateTaken then
-                doBreak = true
-            end
-        end, generatedPlate)
+        if not IsPlateTaken(generatedPlate) then
+            doBreak = true
+        end
 
         if doBreak then
             break
@@ -32,19 +30,12 @@ function GeneratePlate()
     return generatedPlate
 end
 
--- mixing async with sync tasks
 function IsPlateTaken(plate)
-    local callback = 'waiting'
-
-    CoreObj.TriggerServerCallback('bv-cars:isPlateTaken', function(isPlateTaken)
-        callback = isPlateTaken
-    end, plate)
-
-    while type(callback) == 'string' do
-        Citizen.Wait(0)
-    end
-
-    return callback
+  exports.ghmattimysql:execute('SELECT COUNT(*) as count FROM owned_vehicles WHERE plate = @plate', {
+    ['@plate'] = plate
+  }, function(result)
+    return result[1].count > 0
+  end)
 end
 
 function GetRandomNumber(length)

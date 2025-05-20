@@ -17,7 +17,7 @@ end)
 RegisterServerEvent('bv-cars:setVehicleOwned')
 AddEventHandler('bv-cars:setVehicleOwned', function(vehicleProps)
     local _source = source
-    local xPlayer = CoreObj.GetPlayerFromId(_source)
+    local xPlayer = CoreObj.GetPlayer(_source)
 
     exports.ghmattimysql:execute('INSERT INTO owned_vehicles (owner, plate, vehicle) VALUES (@owner, @plate, @vehicle)', {
         ['@owner'] = xPlayer.identifier,
@@ -26,8 +26,8 @@ AddEventHandler('bv-cars:setVehicleOwned', function(vehicleProps)
     })
 end)
 
-CoreObj.RegisterServerCallback('bv-cars:buyVehicle', function(source, cb, vehicleModel)
-    local xPlayer = CoreObj.GetPlayerFromId(source)
+CoreObj.CreateCallback('bv-cars:buyVehicle', function(source, cb, vehicleModel)
+    local xPlayer = CoreObj.GetPlayer(source)
     local vehicleData = nil
 
     for i = 1, #Config.Vehicles, 1 do
@@ -50,7 +50,7 @@ CoreObj.RegisterServerCallback('bv-cars:buyVehicle', function(source, cb, vehicl
     end
 end)
 
-CoreObj.RegisterServerCallback('bv-cars:resellVehicle', function(source, cb, plate, model)
+CoreObj.CreateCallback('bv-cars:resellVehicle', function(source, cb, plate, model)
     local resellPrice = 0
 
     -- calculate the resell price
@@ -68,7 +68,7 @@ CoreObj.RegisterServerCallback('bv-cars:resellVehicle', function(source, cb, pla
         cb(false)
     end
 
-    local xPlayer = CoreObj.GetPlayerFromId(source)
+    local xPlayer = CoreObj.GetPlayer(source)
 
     exports.ghmattimysql:execute('SELECT * FROM owned_vehicles WHERE owner = @owner AND @plate = plate', {
         ['@owner'] = xPlayer.identifier,
@@ -97,34 +97,22 @@ CoreObj.RegisterServerCallback('bv-cars:resellVehicle', function(source, cb, pla
     end)
 end)
 
-CoreObj.RegisterServerCallback('bv-cars:isPlateTaken', function(source, cb, plate)
-    exports.ghmattimysql:execute('SELECT * FROM owned_vehicles WHERE plate = @plate', {
-        ['@plate'] = plate
-    }, function(result)
-        cb(#result ~= 0)
-    end)
-end)
-
 -- ====================================================
-CoreObj.RegisterCommand('addvehicle', 'admin', function(xPlayer, args, showError)
-    TriggerClientEvent('bv-cars:client:addVehicle', xPlayer.source, args.playerId or xPlayer.source)
-end, false, {
-    help = 'Add current vehicle to garage',
-    validate = false,
-    arguments = {{
-        name = 'playerId',
-        help = 'Player',
-        type = 'any'
-    }}
-})
+CoreObj.Commands.Add('addvehicle', 'Add current vehicle to garage', {{
+    name = 'playerId',
+    help = 'Player',
+    type = 'any'
+}}, true, function(source, args, rawCommand)
+    TriggerClientEvent('bv-cars:client:addVehicle', source, args.playerId or source, GeneratePlate())
+end)
 
 RegisterServerEvent('bv-cars:server:addVehicle')
 AddEventHandler('bv-cars:server:addVehicle', function(vehicleProps, playerId)
     local src = source
-    local xPlayer = CoreObj.GetPlayerFromId(src)
+    local xPlayer = CoreObj.GetPlayer(src)
 
     if xPlayer.getGroup() == 'admin' or xPlayer.getGroup() == 'superadmin' then
-        local xTarget = CoreObj.GetPlayerFromId(playerId)
+        local xTarget = CoreObj.GetPlayer(playerId)
 
         if xTarget ~= nil then
             exports.ghmattimysql:execute('INSERT INTO owned_vehicles (owner, plate, vehicle) VALUES (@owner, @plate, @vehicle)', {
@@ -140,30 +128,25 @@ AddEventHandler('bv-cars:server:addVehicle', function(vehicleProps, playerId)
     end
 end)
 
-CoreObj.RegisterCommand('delvehicle', 'admin', function(xPlayer, args, showError)
+CoreObj.Commands.Add('delvehicle', 'Delete vehicle from garage', {{
+    name = 'plate1',
+    help = 'Plate 1',
+    type = 'string'
+},{
+    name = 'plate2',
+    help = 'Plate 2',
+    type = 'string'
+}}, true, function(source, args, rawCommand)
     local plate = args.plate1
     if args.plate2 ~= nil then
         plate = plate .. ' ' .. args.plate2
     end
 
     if plate ~= nil then
-        exports.ghmattimysql:execute('DELETE FROM owned_vehicles WHERE plate = @plate', { ['@plate'] = plate })
-
-        TriggerClientEvent('mythic_notify:client:SendAlert', xPlayer.source, { type = 'inform', text = 'Voertuig verwijderd(indien deze bestond): ' .. plate .. '.' })
+        exports.ghmattimysql:execute('DELETE FROM owned_vehicles WHERE plate = ?', { plate })
+        TriggerClientEvent('mythic_notify:client:SendAlert', source, { type = 'inform', text = 'Voertuig verwijderd(indien deze bestond): ' .. plate .. '.' })
     end
-end, false, {
-    help = 'Delete vehicle from garage',
-    validate = false,
-    arguments = {{
-        name = 'plate1',
-        help = 'Plate 1',
-        type = 'string'
-    }, {
-        name = 'plate2',
-        help = 'Plate 2',
-        type = 'string'
-    }}
-})
+end)
 
 RegisterCommand('transfervehicle', function(source, args)
     local myself = source
@@ -204,20 +187,19 @@ RegisterCommand('transfervehicle', function(source, args)
 
     local mySteamID = GetPlayerIdentifiers(source)
     local mySteam = mySteamID[1]
-    local myID = CoreObj.GetPlayerFromId(source).identifier
-    local myName = CoreObj.GetPlayerFromId(source).name
+    local myID = CoreObj.GetPlayer(source).id
+    local myName = CoreObj.GetPlayer(source).name
 
     local targetSteamID = GetPlayerIdentifiers(args[1])
-    local targetSteamName = CoreObj.GetPlayerFromId(args[1]).name
+    local targetSteamName = CoreObj.GetPlayer(args[1]).name
     local targetSteam = targetSteamID[1]
 
     exports.ghmattimysql:execute('SELECT * FROM owned_vehicles WHERE plate = @plate', {
         ['@plate'] = plate
     }, function(result)
         if #result > 0 then
-            local carOwner = CoreObj.GetPlayerFromIdentifier(result[1].owner).identifier
-            local pName = CoreObj.GetPlayerFromIdentifier(result[1].owner).name
-            if myID == carOwner then
+            local owner = CoreObj.GetPlayer(result[1].owner)
+            if myID == owner.id then
                 data = {}
                 TriggerClientEvent('chatMessage', other, "^4Voertuig met kenteken ^*^1" .. plate .. "^r^4 is naar jouw garage geplaatst door: ^*^2" .. myName)
 
@@ -237,27 +219,31 @@ RegisterCommand('transfervehicle', function(source, args)
 end)
 
 -- ====================================================
-CoreObj.RegisterCommand('addemvehicle', 'admin', function(xPlayer, args, showError)
-    TriggerClientEvent('bv-cars:client:addEmVehicle', xPlayer.source, args.service, args.type, args.mingrade)
-end, false, {
-    help = 'Add emergency vehicle',
-    validate = true,
-    arguments = {{
-        name = 'service',
-        help = 'Service',
-        type = 'string'
-    },{
-        name = 'type',
-        help = 'Type',
-        type = 'string'
-    },{
-        name = 'mingrade',
-        help = 'MinGrade',
-        type = 'number'
-    }}
-})
+CoreObj.Commands.Add('addemvehicle', 'Add emergency vehicle', {{
+    name = 'service',
+    help = 'Service',
+    type = 'string'
+},{
+    name = 'type',
+    help = 'Type',
+    type = 'string'
+},{
+    name = 'mingrade',
+    help = 'MinGrade',
+    type = 'number'
+}}, true, function(source, args, rawCommand)
+    TriggerClientEvent('bv-cars:client:addEmVehicle', source, args.service, args.type, args.mingrade, GeneratePlate())
+end)
 
-CoreObj.RegisterCommand('delemvehicle', 'admin', function(xPlayer, args, showError)
+CoreObj.Commands.Add('delemvehicle', 'Delete emergency vehicle', {{
+    name = 'plate1',
+    help = 'Plate 1',
+    type = 'string'
+},{
+    name = 'plate2',
+    help = 'Plate 2',
+    type = 'string'
+}}, true, function(source, args, rawCommand)
     local plate = args.plate1
     if args.plate2 ~= nil then
         plate = plate .. ' ' .. args.plate2
@@ -265,26 +251,14 @@ CoreObj.RegisterCommand('delemvehicle', 'admin', function(xPlayer, args, showErr
 
     if plate ~= nil then
         exports.ghmattimysql:execute('DELETE FROM em_vehicles WHERE plate = ?', { plate })
-        TriggerClientEvent('mythic_notify:client:SendAlert', xPlayer.source, { type = 'inform', text = 'Hulpdiensten voertuig verwijderd(indien deze bestond): ' .. plate .. '.' })
+        TriggerClientEvent('mythic_notify:client:SendAlert', source, { type = 'inform', text = 'Hulpdiensten voertuig verwijderd(indien deze bestond): ' .. plate .. '.' })
     end
-end, false, {
-    help = 'Delete emergency vehicle',
-    validate = false,
-    arguments = {{
-        name = 'plate1',
-        help = 'Plate 1',
-        type = 'string'
-    }, {
-        name = 'plate2',
-        help = 'Plate 2',
-        type = 'string'
-    }}
-})
+end)
 
 RegisterServerEvent('bv-cars:server:addEmVehicle')
 AddEventHandler('bv-cars:server:addEmVehicle', function(props, service, type, mingrade)
     local src = source
-    local xPlayer = CoreObj.GetPlayerFromId(src)
+    local xPlayer = CoreObj.GetPlayer(src)
 
     if xPlayer.getGroup() == 'admin' or xPlayer.getGroup() == 'superadmin' then
         exports.ghmattimysql:execute('INSERT INTO em_vehicles (service, plate, props, mingrade, stored, type) VALUES (?, ?, ?, ?, ?, ?)', {
@@ -296,7 +270,7 @@ AddEventHandler('bv-cars:server:addEmVehicle', function(props, service, type, mi
     end
 end)
 
-CoreObj.RegisterServerCallback('bv-cars:server:getEmVehicles', function(source, cb, service, type, mingrade)
+CoreObj.CreateCallback('bv-cars:server:getEmVehicles', function(source, cb, service, type, mingrade)
     exports.ghmattimysql:execute('SELECT props, mingrade FROM em_vehicles WHERE service = ? AND stored = ? AND type = ? AND mingrade <= ?', { service, 1, type, mingrade }, function(res)
         cb(res)
     end)

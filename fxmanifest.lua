@@ -2,25 +2,26 @@ fx_version 'cerulean'
 game 'gta5'
 
 shared_script 'config.lua'
-server_script 'server/main.lua'
-client_scripts {
-	'client/utils.lua',
-	'client/main.lua'
+server_scripts {
+	'server/main.lua',
+	'server/utils.lua',
 }
+client_script 'client/main.lua'
 
 ui_page 'html/index.html'
 files {
 	'html/index.html',
-    'html/style.css',
+  'html/style.css',
 	'html/script.js'
 }
 
 dependencies {
-	'fu_core'
+	'bv-core',
+	'mythic_notify',
 }
 
 exports {
-	'GeneratePlate',
+	'GeneratPlate',
 	'GetCarClass',
 	'HasHarness'
 }
