@@ -16,7 +16,9 @@ end)
 
 RegisterServerEvent('bv-cars:setVehicleOwned')
 AddEventHandler('bv-cars:setVehicleOwned', function(vehicleProps)
-    local player = Core.Functions.GetPlayer(source)
+    local src = source
+
+    local player = Core.Functions.GetPlayer(src)
     if player == nil then return end
 
     MySQL.prepare.await('INSERT INTO owned_vehicles (owner, plate, vehicle) VALUES (?, ?, ?)', {
@@ -26,8 +28,8 @@ AddEventHandler('bv-cars:setVehicleOwned', function(vehicleProps)
     })
 end)
 
-Core.CreateCallback('bv-cars:buyVehicle', function(source, cb, vehicleModel)
-    local player = Core.Functions.GetPlayer(source)
+Core.CreateCallback('bv-cars:buyVehicle', function(src, cb, vehicleModel)
+    local player = Core.Functions.GetPlayer(src)
     if player == nil then return end
     local vehicleData = nil
 
@@ -57,7 +59,7 @@ Core.CreateCallback('bv-cars:buyVehicle', function(source, cb, vehicleModel)
     cb(true)
 end)
 
-Core.CreateCallback('bv-cars:resellVehicle', function(source, cb, plate, model)
+Core.CreateCallback('bv-cars:resellVehicle', function(src, cb, plate, model)
     local resellPrice = 0
 
     -- calculate the resell price
@@ -71,11 +73,11 @@ Core.CreateCallback('bv-cars:resellVehicle', function(source, cb, plate, model)
     end
 
     if resellPrice == 0 then
-        TriggerClientEvent('mythic_notify:client:SendAlert', source, { type = 'error', text = 'Je kunt dit voertuig hier niet (meer) verkopen.' })
+        TriggerClientEvent('mythic_notify:client:SendAlert', src, { type = 'error', text = 'Je kunt dit voertuig hier niet (meer) verkopen.' })
         cb(false)
     end
 
-    local player = Core.Functions.GetPlayer(source)
+    local player = Core.Functions.GetPlayer(src)
     if player == nil then return end
     MySQL.prepare.await('SELECT * FROM owned_vehicles WHERE owner = ? AND plate = ?', {
         player.id,
@@ -89,7 +91,7 @@ Core.CreateCallback('bv-cars:resellVehicle', function(source, cb, plate, model)
                     player.Functions.AddMoney('bank', resellPrice, 'sold-vehicle')
                     MySQL.prepare.await('DELETE FROM owned_vehicles WHERE plate = ?', { plate })
 
-                    TriggerClientEvent('mythic_notify:client:SendAlert', source, { type = 'success', text = 'Je hebt je voertuig verkocht voor €' .. resellPrice .. '.' })
+                    TriggerClientEvent('mythic_notify:client:SendAlert', src, { type = 'success', text = 'Je hebt je voertuig verkocht voor €' .. resellPrice .. '.' })
                     cb(true)
                 else
                     print(('bv-cars: %s attempted to sell an vehicle with plate mismatch!'):format(player.id))
@@ -109,13 +111,15 @@ Core.Commands.Add('addvehicle', 'Add current vehicle to garage', {{
     name = 'playerId',
     help = 'Player',
     type = 'any'
-}}, true, function(source, args, rawCommand)
-    TriggerClientEvent('bv-cars:client:addVehicle', source, args.playerId or source, GeneratePlate())
+}}, true, function(src, args, rawCommand)
+    TriggerClientEvent('bv-cars:client:addVehicle', src, args.playerId or src, GeneratePlate())
 end)
 
 RegisterServerEvent('bv-cars:server:addVehicle')
 AddEventHandler('bv-cars:server:addVehicle', function(vehicleProps, playerId)
-    if not Core.Functions.HasPermission(source, 'admin') then
+    local src = source
+
+    if not Core.Functions.HasPermission(src, 'admin') then
         return
     end
 
@@ -128,7 +132,7 @@ AddEventHandler('bv-cars:server:addVehicle', function(vehicleProps, playerId)
         json.encode(vehicleProps)
     })
 
-    TriggerClientEvent('mythic_notify:client:SendAlert', source, { type = 'inform', text = 'Voertuig toegevoegd: ' .. vehicleProps.plate .. '.' })
+    TriggerClientEvent('mythic_notify:client:SendAlert', src, { type = 'inform', text = 'Voertuig toegevoegd: ' .. vehicleProps.plate .. '.' })
 end)
 
 Core.Commands.Add('delvehicle', 'Delete vehicle from garage', {{
@@ -139,7 +143,7 @@ Core.Commands.Add('delvehicle', 'Delete vehicle from garage', {{
     name = 'plate2',
     help = 'Plate 2',
     type = 'string'
-}}, true, function(source, args, rawCommand)
+}}, true, function(src, args, rawCommand)
     local plate = args.plate1
     if args.plate2 ~= nil then
         plate = plate .. ' ' .. args.plate2
@@ -147,19 +151,19 @@ Core.Commands.Add('delvehicle', 'Delete vehicle from garage', {{
     if plate == nil then return end
 
     MySQL.prepare.await('DELETE FROM owned_vehicles WHERE plate = ?', { plate })
-    TriggerClientEvent('mythic_notify:client:SendAlert', source, { type = 'inform', text = 'Voertuig verwijderd(indien deze bestond): ' .. plate .. '.' })
+    TriggerClientEvent('mythic_notify:client:SendAlert', src, { type = 'inform', text = 'Voertuig verwijderd(indien deze bestond): ' .. plate .. '.' })
 end)
 
-RegisterCommand('transfervehicle', function(source, args, rawCommand)
+RegisterCommand('transfervehicle', function(src, args, rawCommand)
     local other = args[1]
     if other == nil then return end
 
-    local player = Core.Functions.GetPlayer(source)
+    local player = Core.Functions.GetPlayer(src)
     if player == nil then return end
 
     local target = Core.Functions.GetPlayer(tonumber(args[1]))
     if target == nil then
-        TriggerClientEvent('chatMessage', source, "DEALERSHIP", {255, 0, 0}, "Er is geen speler met dat ID.")
+        TriggerClientEvent('chatMessage', src, "DEALERSHIP", {255, 0, 0}, "Er is geen speler met dat ID.")
         return
     end
 
@@ -195,13 +199,13 @@ RegisterCommand('transfervehicle', function(source, args, rawCommand)
         plate
     }, function(result)
         if #result == 0 then
-            TriggerClientEvent('chatMessage', source, "^1^*ERROR: ^r^0Er is geen voertuig met dat kenteken.")
+            TriggerClientEvent('chatMessage', src, "^1^*ERROR: ^r^0Er is geen voertuig met dat kenteken.")
         end
 
 
         local owner = Core.Functions.GetPlayer(result[1].owner)
         if player.id ~= owner.id then
-            TriggerClientEvent('chatMessage', source, "^*^1Je bent niet de eigenaar van dat voertuig.")
+            TriggerClientEvent('chatMessage', src, "^*^1Je bent niet de eigenaar van dat voertuig.")
             return
         end
 
@@ -210,7 +214,7 @@ RegisterCommand('transfervehicle', function(source, args, rawCommand)
             target.id,
             plate
         })
-        TriggerClientEvent('chatMessage', source, "^4Je hebt jouw voertuig met het kenteken ^*^1" .. plate .. "\" ^r^4 ^*^3verplaatst^0^4 naar de garage van ^*^2" .. target.name)
+        TriggerClientEvent('chatMessage', src, "^4Je hebt jouw voertuig met het kenteken ^*^1" .. plate .. "\" ^r^4 ^*^3verplaatst^0^4 naar de garage van ^*^2" .. target.name)
     end)
 end)
 
@@ -227,8 +231,8 @@ Core.Commands.Add('addemvehicle', 'Add emergency vehicle', {{
     name = 'mingrade',
     help = 'MinGrade',
     type = 'number'
-}}, true, function(source, args, rawCommand)
-    TriggerClientEvent('bv-cars:client:addEmVehicle', source, args.service, args.type, args.mingrade, GeneratePlate())
+}}, true, function(src, args, rawCommand)
+    TriggerClientEvent('bv-cars:client:addEmVehicle', src, args.service, args.type, args.mingrade, GeneratePlate())
 end)
 
 Core.Commands.Add('delemvehicle', 'Delete emergency vehicle', {{
@@ -239,7 +243,7 @@ Core.Commands.Add('delemvehicle', 'Delete emergency vehicle', {{
     name = 'plate2',
     help = 'Plate 2',
     type = 'string'
-}}, true, function(source, args, rawCommand)
+}}, true, function(src, args, rawCommand)
     local plate = args.plate1
     if args.plate2 ~= nil then
         plate = plate .. ' ' .. args.plate2
@@ -247,23 +251,25 @@ Core.Commands.Add('delemvehicle', 'Delete emergency vehicle', {{
 
     if plate ~= nil then
         MySQL.prepare.await('DELETE FROM em_vehicles WHERE plate = ?', { plate })
-        TriggerClientEvent('mythic_notify:client:SendAlert', source, { type = 'inform', text = 'Hulpdiensten voertuig verwijderd(indien deze bestond): ' .. plate .. '.' })
+        TriggerClientEvent('mythic_notify:client:SendAlert', src, { type = 'inform', text = 'Hulpdiensten voertuig verwijderd(indien deze bestond): ' .. plate .. '.' })
     end
 end)
 
 RegisterServerEvent('bv-cars:server:addEmVehicle')
 AddEventHandler('bv-cars:server:addEmVehicle', function(props, service, type, mingrade)
-    if not Core.Functions.HasPermission(source, 'admin') then
+    local src = source
+
+    if not Core.Functions.HasPermission(src, 'admin') then
         return
     end
 
     MySQL.prepare.await('INSERT INTO em_vehicles (service, plate, props, mingrade, stored, type) VALUES (?, ?, ?, ?, ?, ?)', {
         service, props.plate, json.encode(props), mingrade, 0, type })
 
-    TriggerClientEvent('mythic_notify:client:SendAlert', source, { type = 'inform', text = 'Hulpdiensten voertuig toegevoegd: ' .. props.plate .. '.' })
+    TriggerClientEvent('mythic_notify:client:SendAlert', src, { type = 'inform', text = 'Hulpdiensten voertuig toegevoegd: ' .. props.plate .. '.' })
 end)
 
-Core.CreateCallback('bv-cars:server:getEmVehicles', function(source, cb, service, type, mingrade)
+Core.CreateCallback('bv-cars:server:getEmVehicles', function(src, cb, service, type, mingrade)
     MySQL.prepare.await('SELECT props, mingrade FROM em_vehicles WHERE service = ? AND stored = ? AND type = ? AND mingrade <= ?', { service, 1, type, mingrade }, function(res)
         cb(res)
     end)
