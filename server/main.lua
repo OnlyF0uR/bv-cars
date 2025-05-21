@@ -1,5 +1,5 @@
 -- ====================================================
-CoreObj = exports['bv-core']:GetCoreObject()
+Core = exports['bv-core']:GetCoreect()
 
 -- ====================================================
 Citizen.CreateThread(function()
@@ -16,18 +16,19 @@ end)
 
 RegisterServerEvent('bv-cars:setVehicleOwned')
 AddEventHandler('bv-cars:setVehicleOwned', function(vehicleProps)
-    local _source = source
-    local xPlayer = CoreObj.GetPlayer(_source)
+    local player = Core.Functions.GetPlayer(source)
+    if player == nil then return end
 
-    exports.ghmattimysql:execute('INSERT INTO owned_vehicles (owner, plate, vehicle) VALUES (@owner, @plate, @vehicle)', {
-        ['@owner'] = xPlayer.identifier,
-        ['@plate'] = vehicleProps.plate,
-        ['@vehicle'] = json.encode(vehicleProps)
+    MySQL.prepare.await('INSERT INTO owned_vehicles (owner, plate, vehicle) VALUES (?, ?, ?)', {
+        player.id,
+        vehicleProps.plate,
+        json.encode(vehicleProps)
     })
 end)
 
-CoreObj.CreateCallback('bv-cars:buyVehicle', function(source, cb, vehicleModel)
-    local xPlayer = CoreObj.GetPlayer(source)
+Core.CreateCallback('bv-cars:buyVehicle', function(source, cb, vehicleModel)
+    local player = Core.Functions.GetPlayer(source)
+    if player == nil then return end
     local vehicleData = nil
 
     for i = 1, #Config.Vehicles, 1 do
@@ -36,28 +37,34 @@ CoreObj.CreateCallback('bv-cars:buyVehicle', function(source, cb, vehicleModel)
                 vehicleData = Config.Vehicles[i]
                 break
             else
-                print(('bv-cars: %s attempted to buy a vehicle that is not in the store!'):format(xPlayer.identifier))
+                print(('bv-cars: %s attempted to buy a vehicle that is not in the store!'):format(player.id))
                 return
             end
         end
     end
 
-    if xPlayer.getAccountMoney('bank') < vehicleData.price then
-        cb(false)
-    else
-        xPlayer.removeAccountMoney('bank', vehicleData.price)
-        cb(true)
+    if vehicleData == nil then
+        print(('bv-cars: %s attempted to buy a vehicle that does not exist!'):format(player.id))
+        return
     end
+
+    local bank_money = player.Functions.GetMoney('bank')
+    if bank_money < vehicleData.price then
+        cb(false)
+    end
+
+    player.Functions.RemoveMoney('bank', vehicleData.price, 'bought-vehicle')
+    cb(true)
 end)
 
-CoreObj.CreateCallback('bv-cars:resellVehicle', function(source, cb, plate, model)
+Core.CreateCallback('bv-cars:resellVehicle', function(source, cb, plate, model)
     local resellPrice = 0
 
     -- calculate the resell price
     for i = 1, #Config.Vehicles, 1 do
         if GetHashKey(Config.Vehicles[i].model) == model then
             if Config.Vehicles[i].price ~= nil then
-                resellPrice = CoreObj.Math.Round(Config.Vehicles[i].price * Config.ResellPercentage)
+                resellPrice = Core.Math.Round(Config.Vehicles[i].price * Config.ResellPercentage)
                 break
             end
         end
@@ -68,28 +75,28 @@ CoreObj.CreateCallback('bv-cars:resellVehicle', function(source, cb, plate, mode
         cb(false)
     end
 
-    local xPlayer = CoreObj.GetPlayer(source)
-
-    exports.ghmattimysql:execute('SELECT * FROM owned_vehicles WHERE owner = @owner AND @plate = plate', {
-        ['@owner'] = xPlayer.identifier,
-        ['@plate'] = plate
+    local player = Core.Functions.GetPlayer(source)
+    if player == nil then return end
+    MySQL.prepare.await('SELECT * FROM owned_vehicles WHERE owner = ? AND plate = ?', {
+        player.id,
+        plate
     }, function(result)
         if #result > 0 then -- does the owner match?
             local vehicle = json.decode(result[1].vehicle)
 
             if vehicle.model == model then
                 if vehicle.plate == plate then
-                    xPlayer.addAccountMoney('bank', resellPrice)
-                    exports.ghmattimysql:execute('DELETE FROM owned_vehicles WHERE plate = @plate', { ['@plate'] = plate })
+                    player.Functions.AddMoney('bank', resellPrice, 'sold-vehicle')
+                    MySQL.prepare.await('DELETE FROM owned_vehicles WHERE plate = ?', { plate })
 
                     TriggerClientEvent('mythic_notify:client:SendAlert', source, { type = 'success', text = 'Je hebt je voertuig verkocht voor €' .. resellPrice .. '.' })
                     cb(true)
                 else
-                    print(('bv-cars: %s attempted to sell an vehicle with plate mismatch!'):format(xPlayer.identifier))
+                    print(('bv-cars: %s attempted to sell an vehicle with plate mismatch!'):format(player.id))
                     cb(false)
                 end
             else
-                print(('bv-cars: %s attempted to sell an vehicle with model mismatch!'):format(xPlayer.identifier))
+                print(('bv-cars: %s attempted to sell an vehicle with model mismatch!'):format(player.id))
                 cb(false)
             end
         end
@@ -98,7 +105,7 @@ CoreObj.CreateCallback('bv-cars:resellVehicle', function(source, cb, plate, mode
 end)
 
 -- ====================================================
-CoreObj.Commands.Add('addvehicle', 'Add current vehicle to garage', {{
+Core.Commands.Add('addvehicle', 'Add current vehicle to garage', {{
     name = 'playerId',
     help = 'Player',
     type = 'any'
@@ -108,27 +115,23 @@ end)
 
 RegisterServerEvent('bv-cars:server:addVehicle')
 AddEventHandler('bv-cars:server:addVehicle', function(vehicleProps, playerId)
-    local src = source
-    local xPlayer = CoreObj.GetPlayer(src)
-
-    if xPlayer.getGroup() == 'admin' or xPlayer.getGroup() == 'superadmin' then
-        local xTarget = CoreObj.GetPlayer(playerId)
-
-        if xTarget ~= nil then
-            exports.ghmattimysql:execute('INSERT INTO owned_vehicles (owner, plate, vehicle) VALUES (@owner, @plate, @vehicle)', {
-                ['@owner'] = xTarget.identifier,
-                ['@plate'] = vehicleProps.plate,
-                ['@vehicle'] = json.encode(vehicleProps)
-            })
-    
-            TriggerClientEvent('mythic_notify:client:SendAlert', src, { type = 'inform', text = 'Voertuig toegevoegd: ' .. vehicleProps.plate .. '.' })
-        end
-    else
-        print(('bv-cars: %s attempted to add a vehicle without being authorized!'):format(xPlayer.identifier))
+    if not Core.Functions.HasPermission(source, 'admin') then
+        return
     end
+
+    local target = Core.Functions.GetPlayer(playerId)
+    if target == nil then return end
+
+    MySQL.prepare.await('INSERT INTO owned_vehicles (owner, plate, vehicle) VALUES (?, ?, ?)', {
+        target.id,
+        vehicleProps.plate,
+        json.encode(vehicleProps)
+    })
+
+    TriggerClientEvent('mythic_notify:client:SendAlert', source, { type = 'inform', text = 'Voertuig toegevoegd: ' .. vehicleProps.plate .. '.' })
 end)
 
-CoreObj.Commands.Add('delvehicle', 'Delete vehicle from garage', {{
+Core.Commands.Add('delvehicle', 'Delete vehicle from garage', {{
     name = 'plate1',
     help = 'Plate 1',
     type = 'string'
@@ -141,18 +144,21 @@ CoreObj.Commands.Add('delvehicle', 'Delete vehicle from garage', {{
     if args.plate2 ~= nil then
         plate = plate .. ' ' .. args.plate2
     end
+    if plate == nil then return end
 
-    if plate ~= nil then
-        exports.ghmattimysql:execute('DELETE FROM owned_vehicles WHERE plate = ?', { plate })
-        TriggerClientEvent('mythic_notify:client:SendAlert', source, { type = 'inform', text = 'Voertuig verwijderd(indien deze bestond): ' .. plate .. '.' })
-    end
+    MySQL.prepare.await('DELETE FROM owned_vehicles WHERE plate = ?', { plate })
+    TriggerClientEvent('mythic_notify:client:SendAlert', source, { type = 'inform', text = 'Voertuig verwijderd(indien deze bestond): ' .. plate .. '.' })
 end)
 
-RegisterCommand('transfervehicle', function(source, args)
-    local myself = source
+RegisterCommand('transfervehicle', function(source, args, rawCommand)
     local other = args[1]
+    if other == nil then return end
 
-    if not (GetPlayerName(tonumber(args[1]))) then
+    local player = Core.Functions.GetPlayer(source)
+    if player == nil then return end
+
+    local target = Core.Functions.GetPlayer(tonumber(args[1]))
+    if target == nil then
         TriggerClientEvent('chatMessage', source, "DEALERSHIP", {255, 0, 0}, "Er is geen speler met dat ID.")
         return
     end
@@ -185,41 +191,31 @@ RegisterCommand('transfervehicle', function(source, args)
 
     local plate = (plate01 .. " " .. plate02 .. " " .. plate03 .. " " .. plate04)
 
-    local mySteamID = GetPlayerIdentifiers(source)
-    local mySteam = mySteamID[1]
-    local myID = CoreObj.GetPlayer(source).id
-    local myName = CoreObj.GetPlayer(source).name
-
-    local targetSteamID = GetPlayerIdentifiers(args[1])
-    local targetSteamName = CoreObj.GetPlayer(args[1]).name
-    local targetSteam = targetSteamID[1]
-
-    exports.ghmattimysql:execute('SELECT * FROM owned_vehicles WHERE plate = @plate', {
-        ['@plate'] = plate
+    MySQL.prepare.await('SELECT * FROM owned_vehicles WHERE plate = ?', {
+        plate
     }, function(result)
-        if #result > 0 then
-            local owner = CoreObj.GetPlayer(result[1].owner)
-            if myID == owner.id then
-                data = {}
-                TriggerClientEvent('chatMessage', other, "^4Voertuig met kenteken ^*^1" .. plate .. "^r^4 is naar jouw garage geplaatst door: ^*^2" .. myName)
-
-                exports.ghmattimysql:execute("UPDATE owned_vehicles SET owner = @owner WHERE plate = @plate", {
-                    ['@owner'] = targetSteam,
-                    ['@plate'] = plate
-                })
-                TriggerClientEvent('chatMessage', source, "^4Je hebt jouw voertuig met het kenteken ^*^1" .. plate .. "\" ^r^4 ^*^3verplaatst^0^4 naar de garage van ^*^2" .. targetSteamName)
-            else
-                TriggerClientEvent('chatMessage', source, "^*^1Je bent niet de eigenaar van dat voertuig.")
-            end
-        else
+        if #result == 0 then
             TriggerClientEvent('chatMessage', source, "^1^*ERROR: ^r^0Er is geen voertuig met dat kenteken.")
         end
-    end)
 
+
+        local owner = Core.Functions.GetPlayer(result[1].owner)
+        if player.id ~= owner.id then
+            TriggerClientEvent('chatMessage', source, "^*^1Je bent niet de eigenaar van dat voertuig.")
+            return
+        end
+
+        TriggerClientEvent('chatMessage', other, "^4Voertuig met kenteken ^*^1" .. plate .. "^r^4 is naar jouw garage geplaatst door: ^*^2" .. player.name)
+        MySQL.prepare.await('UPDATE owned_vehicles SET owner = ? WHERE plate = ?', {
+            target.id,
+            plate
+        })
+        TriggerClientEvent('chatMessage', source, "^4Je hebt jouw voertuig met het kenteken ^*^1" .. plate .. "\" ^r^4 ^*^3verplaatst^0^4 naar de garage van ^*^2" .. target.name)
+    end)
 end)
 
 -- ====================================================
-CoreObj.Commands.Add('addemvehicle', 'Add emergency vehicle', {{
+Core.Commands.Add('addemvehicle', 'Add emergency vehicle', {{
     name = 'service',
     help = 'Service',
     type = 'string'
@@ -235,7 +231,7 @@ CoreObj.Commands.Add('addemvehicle', 'Add emergency vehicle', {{
     TriggerClientEvent('bv-cars:client:addEmVehicle', source, args.service, args.type, args.mingrade, GeneratePlate())
 end)
 
-CoreObj.Commands.Add('delemvehicle', 'Delete emergency vehicle', {{
+Core.Commands.Add('delemvehicle', 'Delete emergency vehicle', {{
     name = 'plate1',
     help = 'Plate 1',
     type = 'string'
@@ -250,28 +246,25 @@ CoreObj.Commands.Add('delemvehicle', 'Delete emergency vehicle', {{
     end
 
     if plate ~= nil then
-        exports.ghmattimysql:execute('DELETE FROM em_vehicles WHERE plate = ?', { plate })
+        MySQL.prepare.await('DELETE FROM em_vehicles WHERE plate = ?', { plate })
         TriggerClientEvent('mythic_notify:client:SendAlert', source, { type = 'inform', text = 'Hulpdiensten voertuig verwijderd(indien deze bestond): ' .. plate .. '.' })
     end
 end)
 
 RegisterServerEvent('bv-cars:server:addEmVehicle')
 AddEventHandler('bv-cars:server:addEmVehicle', function(props, service, type, mingrade)
-    local src = source
-    local xPlayer = CoreObj.GetPlayer(src)
-
-    if xPlayer.getGroup() == 'admin' or xPlayer.getGroup() == 'superadmin' then
-        exports.ghmattimysql:execute('INSERT INTO em_vehicles (service, plate, props, mingrade, stored, type) VALUES (?, ?, ?, ?, ?, ?)', {
-            service, props.plate, json.encode(props), mingrade, 0, type })
-    
-        TriggerClientEvent('mythic_notify:client:SendAlert', src, { type = 'inform', text = 'Hulpdiensten voertuig toegevoegd: ' .. props.plate .. '.' })
-    else
-        print(('bv-cars: %s attempted to add an emergency vehicle without being authorized!'):format(xPlayer.identifier))
+    if not Core.Functions.HasPermission(source, 'admin') then
+        return
     end
+
+    MySQL.prepare.await('INSERT INTO em_vehicles (service, plate, props, mingrade, stored, type) VALUES (?, ?, ?, ?, ?, ?)', {
+        service, props.plate, json.encode(props), mingrade, 0, type })
+
+    TriggerClientEvent('mythic_notify:client:SendAlert', source, { type = 'inform', text = 'Hulpdiensten voertuig toegevoegd: ' .. props.plate .. '.' })
 end)
 
-CoreObj.CreateCallback('bv-cars:server:getEmVehicles', function(source, cb, service, type, mingrade)
-    exports.ghmattimysql:execute('SELECT props, mingrade FROM em_vehicles WHERE service = ? AND stored = ? AND type = ? AND mingrade <= ?', { service, 1, type, mingrade }, function(res)
+Core.CreateCallback('bv-cars:server:getEmVehicles', function(source, cb, service, type, mingrade)
+    MySQL.prepare.await('SELECT props, mingrade FROM em_vehicles WHERE service = ? AND stored = ? AND type = ? AND mingrade <= ?', { service, 1, type, mingrade }, function(res)
         cb(res)
     end)
 end)

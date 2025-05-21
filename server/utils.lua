@@ -31,8 +31,8 @@ function GeneratePlate()
 end
 
 function IsPlateTaken(plate)
-  exports.ghmattimysql:execute('SELECT COUNT(*) as count FROM owned_vehicles WHERE plate = @plate', {
-    ['@plate'] = plate
+  MySQL.prepare.await('SELECT COUNT(*) as count FROM owned_vehicles WHERE plate = ?', {
+    plate
   }, function(result)
     return result[1].count > 0
   end)

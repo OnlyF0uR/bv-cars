@@ -18,6 +18,7 @@ files {
 dependencies {
 	'bv-core',
 	'mythic_notify',
+	'oxmysql',
 }
 
 exports {
