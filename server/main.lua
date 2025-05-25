@@ -28,7 +28,7 @@ AddEventHandler('bv-cars:setVehicleOwned', function(vehicleProps)
     })
 end)
 
-Core.CreateCallback('bv-cars:buyVehicle', function(src, cb, vehicleModel)
+Core.Functions.CreateCallback('bv-cars:buyVehicle', function(src, cb, vehicleModel)
     local player = Core.Functions.GetPlayer(src)
     if player == nil then return end
     local vehicleData = nil
@@ -59,7 +59,7 @@ Core.CreateCallback('bv-cars:buyVehicle', function(src, cb, vehicleModel)
     cb(true)
 end)
 
-Core.CreateCallback('bv-cars:resellVehicle', function(src, cb, plate, model)
+Core.Functions.CreateCallback('bv-cars:resellVehicle', function(src, cb, plate, model)
     local resellPrice = 0
 
     -- calculate the resell price
@@ -269,7 +269,7 @@ AddEventHandler('bv-cars:server:addEmVehicle', function(props, service, type, mi
     TriggerClientEvent('mythic_notify:client:SendAlert', src, { type = 'inform', text = 'Hulpdiensten voertuig toegevoegd: ' .. props.plate .. '.' })
 end)
 
-Core.CreateCallback('bv-cars:server:getEmVehicles', function(src, cb, service, type, mingrade)
+Core.Functions.CreateCallback('bv-cars:server:getEmVehicles', function(src, cb, service, type, mingrade)
     MySQL.prepare.await('SELECT props, mingrade FROM em_vehicles WHERE service = ? AND stored = ? AND type = ? AND mingrade <= ?', { service, 1, type, mingrade }, function(res)
         cb(res)
     end)
