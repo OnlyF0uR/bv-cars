@@ -1,5 +1,5 @@
 -- ====================================================
-Core = exports['qb-core']:GetCoreObject()
+Core = exports['bv-core']:GetCoreObject()
 
 -- ====================================================
 Citizen.CreateThread(function()
